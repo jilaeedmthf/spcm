@@ -26,7 +26,7 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     card.card_mode(spcm.SPC_REP_STD_DDS)
 
     # Setup the card
-    channels = spcm.Channels(card) # enable all channels
+    channels = spcm.Channels(card, card_enable=spcm.CHANNEL0) # enable all channels
     channels.enable(True)
     channels.output_load(50 * units.ohm)
     channels.amp(500 * units.mV)
@@ -40,7 +40,7 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     num_cores = len(dds)
     for core in dds:
         core.amp(40 * units.percent / num_cores)
-        core.freq(5 * units.MHz + int(core) * 5 * units.MHz)
+        core.freq(300 * units.kHz + int(core) *(1+int(core)/15) * 50 * units.kHz)
     dds.exec_at_trg()
     dds.write_to_card()
 

@@ -42,7 +42,7 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     dds[0].phase(20 * units.degrees)
     # Read back the exact frequency
     freq = dds[0].get_freq(return_unit=units.MHz)
-    amp = dds[0].get_amp(return_unit=units.dBm)
+    amp = dds[0].get_amp(return_unit=units.mV)
     phase = dds[0].get_phase(return_unit=units.rad)
     print(f"Generated signal frequency: {freq} and amplitude: {amp} and phase: {phase}")
     

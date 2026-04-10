@@ -51,21 +51,21 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     dds.exec_at_trg()
 
     # Ramp the frequency of the carrier
-    dds[0].frequency_slope(5 * units.MHz / units.s) # 5 MHz/s
+    dds[0].frequency_slope(0.5 * units.MHz / units.s) # 0.5 MHz/s
     dds.exec_at_trg()
 
     # Stop frequency ramp
     dds[0].frequency_slope(0)
-    dds[0].freq(15 * units.MHz) # 15 MHz
+    dds[0].freq(6 * units.MHz) # 6 MHz
     dds.exec_at_trg()
 
     # Ramp the amplitude of the carrier
-    dds[0].amplitude_slope(-39 * units.percent / period_s) # 1/s
+    dds[0].amplitude_slope(-30 * units.percent / period_s) # 1/s
     dds.exec_at_trg()
 
     # Stop amplitude ramp
     dds[0].amplitude_slope(0)
-    dds[0].amp(1 * units.percent)
+    dds[0].amp(10 * units.percent)
     dds.exec_at_trg()
 
     # Write the list of commands to the card

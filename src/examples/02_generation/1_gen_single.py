@@ -21,10 +21,10 @@ import numpy as np
 
 card : spcm.Card
 
-# with spcm.Card('/dev/spcm0') as card:                         # if you want to open a specific card
+with spcm.Card('/dev/spcm0') as card:                         # if you want to open a specific card
 # with spcm.Card('TCPIP::192.168.1.10::inst0::INSTR') as card:  # if you want to open a remote card
 # with spcm.Card(serial_number=12345) as card:                  # if you want to open a card by its serial number
-with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:          # if you want to open the first card of a specific type
+# with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:          # if you want to open the first card of a specific type
     
     # setup card
     card.card_mode(spcm.SPC_REP_STD_CONTINUOUS)

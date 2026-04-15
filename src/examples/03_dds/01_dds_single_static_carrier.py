@@ -27,7 +27,8 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     # Setup the channels
     channels = spcm.Channels(card, card_enable=spcm.CHANNEL0)
     channels[0].enable(True)
-    channels[0].output_load(50 * units.ohm)
+    # channels[0].output_load(50 * units.ohm)
+    channels[0].output_load(units.highZ)
     channels[0].amp(0.5 * units.V)
     card.write_setup() # IMPORTANT! this turns on the card's system clock signals, that are required for DDS to work
     
@@ -39,6 +40,7 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:             # if you want t
     # dds[0].amp(-20 * units.dBm)
     dds[0].amp(100 * units.mV)
     dds[0].freq(10 * units.MHz)
+    dds[0].freq(0.1 * units.MHz)
     dds[0].phase(20 * units.degrees)
     # Read back the exact frequency
     freq = dds[0].get_freq(return_unit=units.MHz)

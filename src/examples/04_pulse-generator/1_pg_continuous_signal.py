@@ -76,6 +76,7 @@ with spcm.Card('/dev/spcm0') as card:                           # if you want to
     input("Press a key to stop the pulse generator(s) ")
 
     # stop the pulse generators
+    card.stop()
     pulse_generators.enable(False)
     pulse_generators.write_setup()
 

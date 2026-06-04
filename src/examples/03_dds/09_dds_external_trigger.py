@@ -15,12 +15,14 @@ See the LICENSE file for the conditions under which this software may be used an
 import spcm
 from spcm import units
 
+import time
+
 
 card : spcm.Card
 # with spcm.Card('/dev/spcm0') as card:                         # if you want to open a specific card
 # with spcm.Card('TCPIP::192.168.1.10::inst0::INSTR') as card:  # if you want to open a remote card
 # with spcm.Card(serial_number=12345) as card:                  # if you want to open a card by its serial number
-with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:            # if you want to open the first card of a specific type
+with spcm.Card('/dev/spcm1') as card:            # if you want to open the first card of a specific type
 
     # setup card for DDS
     card.card_mode(spcm.SPC_REP_STD_DDS)
@@ -37,6 +39,7 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:            # if you want to
     trigger.ext0_mode(spcm.SPC_TM_POS) # positive edge
     trigger.ext0_level0(0.5 * units.V) # Trigger level is 0.5 V (500 mV)
     trigger.ext0_coupling(spcm.COUPLING_DC) # set DC coupling
+    trigger.termination(0) # high impedance input; use 1 for 50 ohm termination
     card.write_setup() # IMPORTANT! this turns on the card's system clock signals, that are required for DDS to work
     
     # Setup DDS
@@ -58,12 +61,28 @@ with spcm.Card(card_type=spcm.SPCM_TYPE_AO) as card:            # if you want to
         dds.exec_at_trg()
     dds.write_to_card()
 
-    # Start command including enable of trigger engine and force trigger to start the DDS output immediately
-    card.start(spcm.M2CMD_CARD_ENABLETRIGGER, spcm.M2CMD_CARD_FORCETRIGGER)
-    dds.status()
-    card.status()
+    # Start command including enable of trigger engine. No software force trigger:
+    # each external TTL rising edge on EXT0 advances the DDS command queue.
+    card.start(spcm.M2CMD_CARD_ENABLETRIGGER)
 
-    input("Press Enter to Exit")
-    dds.status()
-    card.status()
+    print("Waiting for rising TTL edges on EXT0 / Trig In.")
+    print("Press Ctrl+C to stop.")
+
+    last_trigger_count = trigger.trigger_counter()
+    last_dds_count = dds.trg_count()
+    print(f"Initial trigger counter: {last_trigger_count}, DDS trigger count: {last_dds_count}")
+
+    try:
+        while True:
+            trigger_count = trigger.trigger_counter()
+            dds_count = dds.trg_count()
+            if trigger_count != last_trigger_count or dds_count != last_dds_count:
+                print(f"TTL count: {trigger_count}, DDS trigger count: {dds_count}")
+                last_trigger_count = trigger_count
+                last_dds_count = dds_count
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        print("Stopping...")
+    finally:
+        card.stop()
 

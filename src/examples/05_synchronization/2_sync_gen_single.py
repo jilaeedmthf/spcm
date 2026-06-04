@@ -45,7 +45,7 @@ with spcm.CardStack(card_identifiers=card_identifiers, sync_identifier=sync_iden
 
         # setup the clock
         clock = spcm.Clock(card)
-        sample_rate = clock.sample_rate(spcm.MEGA(50))
+        sample_rate = clock.sample_rate(spcm.MEGA(40))
         clock.clock_output(False)
 
         # setup the trigger mode

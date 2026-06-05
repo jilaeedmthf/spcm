@@ -23,7 +23,7 @@ Hardware:
 | Test StarHub synchronization | Pass | Both cards run in DDS mode through `sync0`; StarHub reports two synchronized cards. |
 | Test trigger modes from multiple cards | Pass for physical EXT0 | Either card's physical Trig In can trigger both synchronized DDS engines. |
 | Test multiple trigger sources without restart | Pass | Both EXT0 inputs can remain enabled simultaneously and are combined by StarHub OR during one uninterrupted run. |
-| Test actual XIO trigger source | Pending | StarHub routing is validated, but the final XIO-to-Trig-In source still needs a loopback test. |
+| Test actual XIO trigger source | Pass | `spcm0` contributes `rising_edge(X1) AND X2_HIGH` to StarHub. Asynchronous X0 controls looped-back X2 while the synchronized DDS stack remains running. |
 | Test actual ARTIQ trigger source | Pending | StarHub routing is validated, but the final ARTIQ TTL source still needs testing. |
 | Test external 10 MHz clock input | Pending | Not covered by these tests. |
 | Test multitone lock-in reference | Pending | Not covered by these tests. |
@@ -74,6 +74,43 @@ spcm0 EXT0 OR spcm1 EXT0 -> StarHub -> both synchronized DDS engines
 
 works without stopping, reconfiguring, or restarting the stack.
 
+### What creates the StarHub OR
+
+`SPC_TMASK_EXT0` does not create the cross-card OR by itself. It tells one card's
+local trigger engine to contribute its physical EXT0 input as a trigger source.
+
+The cross-card OR is created by the combination of:
+
+1. configuring `SPC_TMASK_EXT0` on more than one card;
+2. enabling those cards together through the StarHub sync mask;
+3. starting/arming the cards through the StarHub stack.
+
+A card configured with `SPC_TMASK_NONE` contributes no local trigger source, but
+it remains a synchronized trigger receiver. If it is included in the StarHub
+enable mask, it still receives triggers contributed by the source cards.
+
+For a future four-card stack with two physical Trig In sources:
+
+| Card | Local trigger mask | Role |
+| --- | --- | --- |
+| `spcm0` | `SPC_TMASK_EXT0` | Contributes Trig In source A |
+| `spcm1` | `SPC_TMASK_NONE` | Receives synchronized trigger only |
+| `spcm2` | `SPC_TMASK_EXT0` | Contributes Trig In source B |
+| `spcm3` | `SPC_TMASK_NONE` | Receives synchronized trigger only |
+
+The resulting trigger path is:
+
+```text
+spcm0 EXT0 OR spcm2 EXT0
+    -> StarHub distributed card trigger
+    -> DDS engines on spcm0, spcm1, spcm2, and spcm3
+```
+
+Every DDS engine must use `SPCM_DDS_TRG_SRC_CARD` to consume the distributed
+card-trigger event. The concise driver-reference implementation is:
+
+`src/examples/05_synchronization/6_sync_dds_ext0_or_reference.py`
+
 ## Important DDS diagnostics
 
 For these M2p.6533 cards, `DDS.trg_count()` did not increment for every external
@@ -121,24 +158,190 @@ the external timing protocol guarantees the event order. Possible strategies:
   immediate commands;
 - use separate hardware functionality when source-specific routing is required.
 
+## Validated XIO trigger-engine gate
+
+### Motivation
+
+The rest of the experiment requires an uninterrupted 9.93 Hz signal, but the
+9.93 Hz events must sometimes be prevented from advancing the StarHub DDS
+queues. The ARTIQ trigger must remain available during those intervals.
+
+The current two cards do not have the PulseGen firmware option. The first test
+should therefore use a laboratory pulse generator as the continuous 9.93 Hz
+source. If the trigger-gating behavior is validated, PulseGen can later be
+licensed on one card to produce two synchronized continuous 9.93 Hz outputs:
+
+```text
+future Card A XIO output 0 -> uninterrupted 9.93 Hz for the rest of the system
+future Card A XIO output 1 -> Card B XIO trigger input
+```
+
+Card B does not need PulseGen. Its main trigger engine acts as the logic
+gate. One XIO trigger input receives the 9.93 Hz source, and another receives a
+HIGH/LOW gate-enable level. The intended local trigger expression is:
+
+```text
+Card B local trigger = rising_edge(9.93 Hz XIO input) AND gate-enable XIO HIGH
+```
+
+Accepted Card B trigger events are contributed directly to StarHub. Card B does
+not need to generate a physical gated-copy output:
+
+```text
+Card B accepted 9.93 Hz events OR ARTIQ trigger from another source card
+    -> StarHub distributed card trigger
+    -> all synchronized DDS engines
+```
+
+The AND mask is local to Card B. It should suppress Card B's 9.93 Hz
+contribution without suppressing the ARTIQ trigger contributed by another
+StarHub card.
+
+### Card B XIO assignment
+
+| Card B XIO | Role |
+| --- | --- |
+| XIO output | Gate-enable level controlled as an asynchronous output |
+| XIO input 1 | Receives the gate-enable level through a short loopback cable |
+| XIO input 2 | Receives the continuous 9.93 Hz signal |
+| Remaining XIO | Reserved; optional diagnostic output if useful |
+
+Validated trigger-engine configuration:
+
+```text
+OR mask:  9.93 Hz XIO input, positive-edge mode
+AND mask: gate-enable XIO input, HIGH-level mode
+```
+
+A Card B asynchronous XIO output drives the gate-enable input through a short
+physical loopback.
+
+### Capability-probe result
+
+On June 5, 2026, `spcm0` accepted and read back the gate configuration
+without a PulseGen license:
+
+| Required capability | Result |
+| --- | --- |
+| X0 asynchronous output | Pass |
+| X1 trigger input | Pass |
+| X2 trigger input | Pass |
+| X1/EXT1 available in trigger OR mask | Pass |
+| X2/EXT2 available in trigger AND mask | Pass |
+| X1/EXT1 positive-edge mode available in OR mask | Pass |
+| X2/EXT2 HIGH-level mode available in AND mask | Pass |
+
+Relevant readbacks:
+
+```text
+available trigger OR mask:  0x1f
+available trigger AND mask: 0x1f
+X0 mode:                    0x2  (ASYNCOUT)
+X1 mode:                    0x10 (TRIGIN)
+X2 mode:                    0x10 (TRIGIN)
+trigger OR mask:            0x4  (EXT1)
+trigger AND mask:           0x8  (EXT2)
+X1/EXT1 trigger mode:       0x1  (positive edge)
+X2/EXT2 trigger mode:       0x8  (HIGH level)
+```
+
+This confirms that the required XIO routing and trigger-engine Boolean
+configuration exist on the installed M2p.6533 hardware.
+
+A stopped-card electrical loopback probe requested X0 LOW, HIGH, then LOW.
+Looped-back X2 followed all three states correctly. X0 itself remained LOW in
+the asynchronous register readback even while physical X2 was HIGH, so the X0
+bit must not be used to validate its output state on this hardware.
+
+During an initial synchronized runtime test, asynchronous X0 successfully
+changed looped-back X2 through LOW, HIGH, then LOW while both cards remained
+running. Neither card triggered because the function-generator signal was not
+yet reaching X1. A separate two-second X1 input probe showed:
+
+```text
+saw X1 LOW:              no
+saw X1 HIGH:             yes
+sampled X1 rising edges:  0
+sampled X1 falling edges: 0
+```
+
+After correcting the function-generator connection, the X1 input probe observed
+20 rising and 20 falling edges in two seconds from the 10 Hz, 3.3 V, 20% duty
+cycle signal.
+
+The full StarHub test then passed:
+
+| Gate state | Trigger-counter change | DDS queue change | Result |
+| --- | --- | --- | --- |
+| Initial X0/X2 LOW, 1.5 s | Both cards: `+0` | Both cards: `0` consumed | Pass |
+| X0/X2 HIGH, measured 1.5 s window | Both cards: `+15` | Both cards: `15` consumed | Pass |
+| Final X0/X2 LOW, 1.5 s | Both cards: `+0` | Both cards: `0` consumed | Pass |
+
+Two additional synchronized triggers occurred during the 150 ms settling period
+immediately after opening the gate, giving a total trigger counter of 17 before
+the gate was closed. This is expected for a continuously running 10 Hz source
+and shows that the gate transition takes effect immediately rather than at the
+start of the later measurement window.
+
+Validated path:
+
+```text
+function generator -> spcm0 X1 positive edge
+spcm0 asynchronous X0 -> physical loopback -> spcm0 X2 HIGH gate
+X1 edge AND X2 HIGH -> spcm0 trigger engine -> StarHub
+    -> spcm0 DDS and spcm1 DDS
+```
+
+This confirms that the M2p.6533 trigger engine can perform the required gate
+without a PulseGen license and without stopping or reconfiguring the StarHub
+stack.
+
+### Remaining hardware tests
+
+1. Verify an ARTIQ or laboratory trigger contributed by another StarHub card
+   still consumes every DDS queue while Card B's 9.93 Hz gate is LOW.
+2. Characterize asynchronous X0 host-command latency and determine whether it is
+   acceptable for the RFSO timing protocol.
+3. Boundary and endurance test:
+   - measure behavior when the gate changes near a 9.93 Hz rising edge;
+   - verify no extra, shortened, or duplicated trigger event is produced;
+   - run long enough to verify stable trigger counts and synchronized DDS queue
+     consumption.
+
+### Pass criteria
+
+- Gate-enable LOW blocks every Card B 9.93 Hz contribution.
+- Gate-enable HIGH passes exactly one Card B trigger per 9.93 Hz rising edge.
+- ARTIQ triggers from the other source card remain active in both gate states.
+- Every accepted event advances all synchronized DDS queues equally.
+- The gate state can be changed without stopping or reconfiguring the cards.
+- No boundary transition creates an unintended StarHub trigger.
+
+The configuration, runtime asynchronous X0-to-X2 switching, local Boolean gate,
+and gated StarHub distribution are validated on the M2p.6533 hardware.
+
 ## Test scripts
 
 - `src/examples/05_synchronization/5_sync_dds.py`
   - DDS-mode StarHub smoke test.
+- `src/examples/05_synchronization/6_sync_dds_ext0_or_reference.py`
+  - Concise multi-card/multi-source trigger configuration reference.
 - `src/examples/05_synchronization/8_sync_dds_ext0_trigger_or.py`
   - Final simultaneous physical EXT0 OR test.
 - `src/examples/05_synchronization/9_sync_dds_ext0_trigger_sources.py`
   - One-source-at-a-time physical EXT0 diagnostic.
+- `src/examples/05_synchronization/10_sync_dds_xio_trigger_gate.py`
+  - XIO trigger-engine AND-gate capability probe and StarHub behavior test.
 - `src/examples/03_dds/09_dds_external_trigger.py`
   - Single-card physical EXT0 reference test.
 
 ## Next hardware tests
 
-1. Replace the laboratory trigger source with XIO-to-Trig-In loopback and verify
-   the same queue/counter behavior.
-2. Connect the intended ARTIQ TTL to the other Trig In and verify OR behavior
-   with the actual two-source hardware.
-3. Test nearly coincident XIO and ARTIQ pulses to determine whether both are
+1. Characterize asynchronous X0 gate-control latency while the StarHub DDS group
+   is running.
+2. Connect the intended ARTIQ TTL to the other source card and verify it remains
+   active while Card B's 9.93 Hz contribution is gated off.
+3. Test nearly coincident 9.93 Hz and ARTIQ pulses to determine whether both are
    recognized or merged by the trigger system.
 4. Measure trigger-to-output latency and card-to-card timing skew on a scope.
 5. Test long-running DDS queue refill/streaming under the intended trigger rates.

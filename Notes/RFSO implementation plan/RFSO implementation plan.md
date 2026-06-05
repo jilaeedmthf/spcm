@@ -29,7 +29,8 @@ The new hardware tests will mostly focus on synchronization side:
     - [ ]  This should be trivial. Should check if there are communication delay by using `exec_now`
 - [x]  Test starhub synchronization
 - [x]  Test trigger modes from multiple cards
-    - [ ]  Ideally we want to select different trigger sources. We need at least one XIO trigger and one ARTIQ trigger. XIO trigger for phase updates of different frequencies. ARTIQ trigger for amplitude ramp/jump in timing sequence.
+    - [x]  Validate the two-source trigger architecture. The gated XIO trigger path and independent physical Trig In/StarHub OR path work without restarting the cards. XIO triggers phase updates; the independent Trig In path is reserved for ARTIQ amplitude ramp/jump triggers.
+    - [ ]  Repeat the independent Trig In test using the actual ARTIQ TTL source.
     - [x]  Both physical Trig In ports can remain enabled and are combined by StarHub OR without restarting the cards. See [StarHub DDS synchronization hardware tests](../StarHub%20DDS%20synchronization%20tests/StarHub%20DDS%20synchronization%20tests.md).
 - [ ]  Test multitone idea for lock-in amplifier
     - [ ]  I want to combine multiple frequencies we need (like frot and frf) in Lock-in ref signal. With this mode, we don’t need to update the reference unless changing frequency. Good for continuous Erot running and monitoring. But I am not sure how much this affect the lock-in performance or how much we would benefit from this trick. Maybe not much

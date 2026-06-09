@@ -25,7 +25,7 @@ Hardware:
 | Test multiple trigger sources without restart | Pass | Both EXT0 inputs can remain enabled simultaneously and are combined by StarHub OR during one uninterrupted run. |
 | Test actual XIO trigger source | Pass | `spcm0` contributes `rising_edge(X1) AND X2_HIGH` to StarHub. Asynchronous X0 controls looped-back X2 while the synchronized DDS stack remains running. |
 | Test actual ARTIQ trigger source | Pending | StarHub routing is validated, but the final ARTIQ TTL source still needs testing. |
-| Test external 10 MHz clock input | Pending | Not covered by these tests. |
+| Test external 10 MHz clock input | Pass | `/dev/spcm1` locked to a 10 MHz sine reference when the source was set to 1 Vpp into 50 ohm and the card clock input was 50-ohm terminated. |
 | Test multitone lock-in reference | Pending | Not covered by these tests. |
 | Test measurement loop without ARTIQ | Pending | Not covered by these tests. |
 
@@ -320,6 +320,51 @@ stack.
 The configuration, runtime asynchronous X0-to-X2 switching, local Boolean gate,
 and gated StarHub distribution are validated on the M2p.6533 hardware.
 
+## External 10 MHz reference clock test
+
+On June 8, 2026, `src/examples/05_synchronization/11_sync_dds_external_reference_clock.py`
+tested the 10 MHz sine reference on the two-card StarHub stack.
+
+Required wiring for the StarHub stack:
+
+```text
+10 MHz sine reference -> /dev/spcm1 StarHub carrier/master clock input
+```
+
+The reference must be connected to the clock/reference input, not to EXT0 or
+the XIO trigger inputs. The working configuration used a 10 MHz sine source set
+to 1 Vpp into 50 ohm and enabled 50-ohm clock-input termination on `/dev/spcm1`.
+The script sets the clock threshold to 0 mV, writes the 10 MHz reference
+frequency before the sample rate, disables clock output, and uses only 20 mV DDS
+output amplitude for the smoke test.
+
+Live card readbacks from `/dev/spcm1`:
+
+```text
+external-reference range: 128 kHz to 125 MHz
+clock threshold range:    -5000 mV to +5000 mV
+clock threshold step:     1 mV
+clock mode:               0x20 (SPC_CM_EXTREFCLOCK)
+reference clock:          10000000 Hz
+clock termination:        50 ohm
+clock threshold:          0 mV
+PLL locked:               1
+```
+
+The StarHub stack reported both cards and both DDS queues consumed the same
+number of synchronized commands:
+
+```text
+StarHub carrier index: /dev/spcm1
+StarHub enable mask:   0x3
+DDS commands consumed: [7, 7]
+```
+
+Conclusion: the M2p.6533 StarHub stack can lock to the external 10 MHz sine
+reference when the source and card are both configured for 50 ohm. An earlier
+high-impedance attempt with the same 0 mV threshold did not report PLL lock, so
+future tests should use 50-ohm termination for this 1 Vpp, 50-ohm reference.
+
 ## Test scripts
 
 - `src/examples/05_synchronization/5_sync_dds.py`
@@ -332,6 +377,9 @@ and gated StarHub distribution are validated on the M2p.6533 hardware.
   - One-source-at-a-time physical EXT0 diagnostic.
 - `src/examples/05_synchronization/10_sync_dds_xio_trigger_gate.py`
   - XIO trigger-engine AND-gate capability probe and StarHub behavior test.
+- `src/examples/05_synchronization/11_sync_dds_external_reference_clock.py`
+  - StarHub carrier external-reference clock test using conservative
+    low-voltage 10 MHz sine settings.
 - `src/examples/03_dds/09_dds_external_trigger.py`
   - Single-card physical EXT0 reference test.
 

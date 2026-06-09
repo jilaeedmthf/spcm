@@ -24,7 +24,11 @@ Most tests are already done:
 
 The new hardware tests will mostly focus on synchronization side:
 
-- [ ]  Test external clock input. The company said the normal sinewave 10 MHz clock should work. Should try again
+- [x]  Test external clock input. The company said the normal sinewave 10 MHz clock should work. Should try again
+    - June 8, 2026: `/dev/spcm1` StarHub carrier locked to a 10 MHz sine
+      reference with the source set to 1 Vpp into 50 ohm and the card clock
+      input 50-ohm terminated. High-impedance input did not lock. See
+      [StarHub DDS synchronization hardware tests](../StarHub%20DDS%20synchronization%20tests/StarHub%20DDS%20synchronization%20tests.md).
 - [x]  Test communication to each card
     - [ ]  This should be trivial. Should check if there are communication delay by using `exec_now`
 - [x]  Test starhub synchronization

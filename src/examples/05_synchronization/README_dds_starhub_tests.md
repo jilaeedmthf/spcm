@@ -17,6 +17,12 @@ connected through `sync0`.
   `rising_edge(X1) AND X2_HIGH` to StarHub while X0 controls the X2 gate through
   a physical loopback. This passed on the two-card M2p.6533 stack and does not
   require PulseGen firmware.
+- `11_sync_dds_external_reference_clock.py`: tests the StarHub carrier's
+  external-reference clock input with a conservative 10 MHz sine configuration.
+  It configures `/dev/spcm1` as the external-reference master, keeps the clock
+  input high impedance by default unless `--clock-termination-50ohm` is passed,
+  and then attempts a small-amplitude DDS StarHub trigger smoke test. The
+  1 Vpp, 50-ohm sine reference passed with `--clock-termination-50ohm`.
 
 ## Pass criteria
 
@@ -39,3 +45,15 @@ The physical EXT0 tests use:
 
 Pass `--termination` only when the trigger source is intended to drive a 50 ohm
 load.
+
+The external-reference clock test starts with:
+
+- 10 MHz reference frequency;
+- high-impedance clock input;
+- 0 mV clock threshold;
+- clock output disabled;
+- 20 mV DDS output amplitude.
+
+Use `--clock-termination-50ohm` when the reference source is intended to drive a
+50 ohm clock input at the desired voltage. The tested 10 MHz source was set to
+1 Vpp into 50 ohm and locked successfully with this option.

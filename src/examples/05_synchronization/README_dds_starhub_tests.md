@@ -23,6 +23,11 @@ connected through `sync0`.
   input high impedance by default unless `--clock-termination-50ohm` is passed,
   and then attempts a small-amplitude DDS StarHub trigger smoke test. The
   1 Vpp, 50-ohm sine reference passed with `--clock-termination-50ohm`.
+- `12_sync_dds_phase_repeatability_timer.py`: tests CH0 phase repeatability
+  across `/dev/spcm0` and `/dev/spcm1` using the external 10 MHz reference,
+  a StarHub software force trigger, each card's DDS timer, and a later repeated
+  `stack.force_trigger()`. The repeated force trigger cleanly applied a
+  pre-queued third phase state after the timer-applied second state.
 
 ## Pass criteria
 
@@ -33,6 +38,11 @@ For physical-trigger tests, use these two measurements:
 
 `DDS.trg_count()` is printed only as diagnostic context where present. On these
 M2p.6533 cards it did not track each consumed external-trigger DDS update.
+
+For the force-trigger/timer phase-repeatability test, the lock-in phase readout,
+phase readback, clean DDS status, and trigger-counter deltas are more reliable
+than DDS queue-count deltas. In that test, `queue_cmd_count()` can report zero
+additional consumption after a valid repeated `stack.force_trigger()`.
 
 ## Electrical defaults
 

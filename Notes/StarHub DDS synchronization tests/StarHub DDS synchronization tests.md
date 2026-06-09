@@ -26,6 +26,7 @@ Hardware:
 | Test actual XIO trigger source | Pass | `spcm0` contributes `rising_edge(X1) AND X2_HIGH` to StarHub. Asynchronous X0 controls looped-back X2 while the synchronized DDS stack remains running. |
 | Test actual ARTIQ trigger source | Pending | StarHub routing is validated, but the final ARTIQ TTL source still needs testing. |
 | Test external 10 MHz clock input | Pass | `/dev/spcm1` locked to a 10 MHz sine reference when the source was set to 1 Vpp into 50 ohm and the card clock input was 50-ohm terminated. |
+| Test repeated StarHub force trigger with DDS timer | Pass | A pre-queued force-trigger state, timer state, and later force-trigger state applied repeatably across both cards while locked to the external 10 MHz reference. |
 | Test multitone lock-in reference | Pending | Not covered by these tests. |
 | Test measurement loop without ARTIQ | Pending | Not covered by these tests. |
 
@@ -365,6 +366,47 @@ reference when the source and card are both configured for 50 ohm. An earlier
 high-impedance attempt with the same 0 mV threshold did not report PLL lock, so
 future tests should use 50-ohm termination for this 1 Vpp, 50-ohm reference.
 
+## DDS phase repeatability with repeated force trigger
+
+On June 9, 2026, `src/examples/05_synchronization/12_sync_dds_phase_repeatability_timer.py`
+tested cross-card CH0 phase repeatability while the StarHub stack was locked to
+the external 10 MHz sine reference.
+
+The successful queue pattern was:
+
+```text
+initial exec_now state: DDS output muted, trigger source CARD
+queued state 1: CARD trigger -> 300 kHz, 500 mV, 0 deg, trigger source TIMER
+queued state 2: TIMER event -> 300 kHz, 500 mV, second phase, trigger source CARD
+queued state 3: later CARD trigger -> 300 kHz, 500 mV, third phase
+```
+
+Runtime sequence:
+
+```text
+stack.start(M2CMD_CARD_ENABLETRIGGER)
+stack.force_trigger()     -> applies state 1 and starts each DDS timer
+DDS timer delay elapses   -> applies state 2 on each card
+stack.force_trigger()     -> applies pre-queued state 3 on both cards
+```
+
+The lock-in readout showed stable and repeatable cross-card phase. In
+particular, after the later `stack.force_trigger()`, `/dev/spcm1` reached the
+configured third-state phase of 120 degrees relative to `/dev/spcm0`.
+
+Conclusion: `stack.force_trigger()` is not a one-shot start mechanism. It can be
+used repeatedly during one synchronized StarHub run as the distributed CARD
+trigger input for DDS commands queued with `SPCM_DDS_TRG_SRC_CARD`. This supports
+the intended RFSO pattern of writing queued DDS updates and advancing them with
+later synchronized software or hardware trigger events.
+
+Diagnostic note: for this finite force-trigger/timer/force-trigger pattern,
+`DDS.queue_cmd_count()` did not always report a positive command-consumption
+delta after a valid repeated force trigger. The stronger evidence was the
+trigger-counter delta, clean DDS status, DDS phase readback, and lock-in phase
+measurement. Queue-count deltas should therefore be treated as diagnostic only
+for this pattern.
+
 ## Test scripts
 
 - `src/examples/05_synchronization/5_sync_dds.py`
@@ -380,6 +422,10 @@ future tests should use 50-ohm termination for this 1 Vpp, 50-ohm reference.
 - `src/examples/05_synchronization/11_sync_dds_external_reference_clock.py`
   - StarHub carrier external-reference clock test using conservative
     low-voltage 10 MHz sine settings.
+- `src/examples/05_synchronization/12_sync_dds_phase_repeatability_timer.py`
+  - CH0 phase-repeatability test using the external 10 MHz reference, StarHub
+    `force_trigger()`, DDS timer advancement, and a later repeated
+    `force_trigger()`.
 - `src/examples/03_dds/09_dds_external_trigger.py`
   - Single-card physical EXT0 reference test.
 
